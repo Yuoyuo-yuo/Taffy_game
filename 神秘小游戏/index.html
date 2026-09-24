@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>抓住小塔菲</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100dvh; display: grid; place-items: center; padding: 20px; background: #fff2f6; color: #623e50; font-family: system-ui, sans-serif; }
+    main { width: min(100%, 440px); text-align: center; }
+    h1 { margin: 0 0 8px; font-size: 32px; }
+    p { line-height: 1.6; }
+    .stats { display: flex; justify-content: space-between; margin: 24px 0 16px; font-weight: 700; }
+    .board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .hole { aspect-ratio: 1; padding: 0; border: 0; border-radius: 24px; background: #f1dce5; cursor: pointer; touch-action: manipulation; }
+    .hole:disabled { cursor: default; }
+    .hole:focus-visible, #start:focus-visible { outline: 3px solid #7547ad; outline-offset: 4px; }
+    .taffy { display: none; line-height: 1; }
+    .taffy img { display: block; width: 76%; aspect-ratio: 1; object-fit: contain; margin: 0 auto; border-radius: 14px; pointer-events: none; }
+    .name { display: block; margin-top: 6px; font-size: 14px; font-weight: bold; color: #8d4166; }
+    .active { background: #fff; box-shadow: 0 5px 0 #e7a5c2; }
+    .active .taffy { display: block; }
+    #start { margin-top: 24px; padding: 13px 36px; border: 0; border-radius: 99px; background: #d85891; color: white; font: inherit; font-weight: 700; cursor: pointer; }
+    #message { min-height: 26px; margin: 16px 0 0; }
+    footer { margin-top: 28px; font-size: 12px; color: #977788; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>🎀 抓住小塔菲</h1>
+    <p>塔菲出现啦！点中她 +1 分，30 秒挑战！<br>六款头像轮换，每次出现都换一张。</p>
+    <div class="stats"><span>得分：<b id="score">0</b></span><span>剩余：<b id="time">30</b> 秒</span></div>
+    <div class="board" id="board" aria-label="游戏区域"></div>
+    <button id="start">开始游戏</button>
+    <p id="message" role="status">准备好了吗？</p>
+    <footer>粉丝趣味小游戏 · 非官方<br>头像与表情来源：<a href="https://space.bilibili.com/1265680561" target="_blank" rel="noopener noreferrer">永雏塔菲 B 站主页</a> / <a href="https://www.bilibili.com/opus/809639835392278553" target="_blank" rel="noopener noreferrer">公开动态</a></footer>
+  </main>
+  <script>
+    const board = document.querySelector('#board');
+    const scoreText = document.querySelector('#score');
+    const timeText = document.querySelector('#time');
+    const start = document.querySelector('#start');
+    const message = document.querySelector('#message');
+    let score = 0, target = -1, playing = false, deadline = 0;
+    let clock, moveTimer;
+    const portraits = Array.from({ length: 6 }, (_, i) => `assets/taffy-${i}.${i === 5 ? 'jpg' : 'png'}`);
+    portraits.forEach(src => { const img = new Image(); img.src = src; });
+    let portraitBag = [], previousPortrait = -1;
+    function nextPortrait() {
+      if (!portraitBag.length) {
+        portraitBag = portraits.map((_, i) => i);
+        for (let i = portraitBag.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [portraitBag[i], portraitBag[j]] = [portraitBag[j], portraitBag[i]];
+        }
+        const last = portraitBag.length - 1;
+        if (portraitBag[last] === previousPortrait) {
+          [portraitBag[0], portraitBag[last]] = [portraitBag[last], portraitBag[0]];
+        }
+      }
+      previousPortrait = portraitBag.pop();
+      return portraits[previousPortrait];
+    }
+    const holes = Array.from({ length: 9 }, (_, i) => {
+      const button = document.createElement('button');
+      button.className = 'hole';
+      button.disabled = true;
+      button.setAttribute('aria-label', `位置 ${i + 1}，空位`);
+      button.innerHTML = '<span class="taffy" aria-hidden="true"><img alt="永雏塔菲" draggable="false"><span class="name">永雏塔菲 🎀</span></span>';
+      button.addEventListener('click', () => {
+        if (!playing) return;
+        if (Date.now() >= deadline) return finish();
+        if (i !== target) return;
+        scoreText.textContent = ++score;
+        showTarget();
+      });
+      board.append(button);
+      return button;
+    });
+    function showTarget() {
+      clearTimeout(moveTimer);
+      const previous = target;
+      // 从其余八个位置中选择，保证每次都会移动。
+      target = previous < 0 ? Math.floor(Math.random() * 9) : (previous + 1 + Math.floor(Math.random() * 8)) % 9;
+      holes[target].querySelector('img').src = nextPortrait();
+      holes.forEach((hole, i) => {
+        hole.classList.toggle('active', i === target);
+        hole.setAttribute('aria-label', `位置 ${i + 1}，${i === target ? '小塔菲，点击得分' : '空位'}`);
+      });
+      moveTimer = setTimeout(() => {
+        if (Date.now() >= deadline) finish();
+        else showTarget();
+      }, 850);
+    }
+    function finish() {
+      playing = false;
+      clearInterval(clock);
+      clearTimeout(moveTimer);
+      target = -1;
+      timeText.textContent = 0;
+      holes.forEach((hole, i) => {
+        hole.disabled = true;
+        hole.classList.remove('active');
+        hole.setAttribute('aria-label', `位置 ${i + 1}，空位`);
+      });
+      message.textContent = `时间到！你抓住了塔菲 ${score} 次！`;
+      start.textContent = '再玩一次';
+    }
+    start.addEventListener('click', () => {
+      clearInterval(clock);
+      clearTimeout(moveTimer);
+      score = 0;
+      target = -1;
+      playing = true;
+      scoreText.textContent = 0;
+      timeText.textContent = 30;
+      deadline = Date.now() + 30000;
+      holes.forEach(hole => hole.disabled = false);
+      message.textContent = '快点抓住塔菲！';
+      start.textContent = '重新开始';
+      showTarget();
+      clock = setInterval(() => {
+        timeText.textContent = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+        if (Date.now() >= deadline) finish();
+      }, 100);
+    });
+  </script>
+</body>
+</html>
